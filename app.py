@@ -8,66 +8,71 @@ from implicit.bpr import BayesianPersonalizedRanking
 from scipy.sparse import csr_matrix
 
 # Load your datasets
-user_df = pd.read_csv("user_dataset1.csv")  # Replace with your actual file path
-product_df = pd.read_csv("product_dataset1.csv")  # Replace with your actual file path
-interaction_df = pd.read_csv("interaction_dataset1.csv")  # Replace with your actual file path
+uploaded_user_file = st.file_uploader("Upload User Dataset (CSV)", type=["csv"])
+uploaded_product_file = st.file_uploader("Upload Product Dataset (CSV)", type=["csv"])
+uploaded_interaction_file = st.file_uploader("Upload Interaction Dataset (CSV)", type=["csv"])
 
-# Preprocessing: Create user and product dictionaries for mapping IDs to indices
-user_dict = {user_id: index for index, user_id in enumerate(user_df["user_id"])}
-product_dict = {product_id: index for index, product_id in enumerate(product_df["product_id"])}
+if uploaded_user_file and uploaded_product_file and uploaded_interaction_file:
+    user_df = pd.read_csv(uploaded_user_file)
+    product_df = pd.read_csv(uploaded_product_file)
+    interaction_df = pd.read_csv(uploaded_interaction_file)
 
-# Preprocessing: Create user and product interaction matrices
-user_indices = [user_dict[user_id] for user_id in interaction_df["user_id"]]
-product_indices = [product_dict[product_id] for product_id in interaction_df["product_id"]]
-interaction_values = np.ones(len(user_indices))
+    # Preprocessing: Create user and product dictionaries for mapping IDs to indices
+    user_dict = {user_id: index for index, user_id in enumerate(user_df["user_id"])}
+    product_dict = {product_id: index for index, product_id in enumerate(product_df["product_id"])}
 
-interactions_matrix = csr_matrix((interaction_values, (user_indices, product_indices)),
-                                 shape=(len(user_dict), len(product_dict)))
+    # Preprocessing: Create user and product interaction matrices
+    user_indices = [user_dict[user_id] for user_id in interaction_df["user_id"]]
+    product_indices = [product_dict[product_id] for product_id in interaction_df["product_id"]]
+    interaction_values = np.ones(len(user_indices))
 
-# Preprocessing: Create user preference vectors using TF-IDF for content-based filtering
-vectorizer = TfidfVectorizer()
-product_descriptions = product_df["description"].fillna("")
-product_description_vectors = vectorizer.fit_transform(product_descriptions)
-user_preferences_matrix = interactions_matrix.dot(product_description_vectors)
+    interactions_matrix = csr_matrix((interaction_values, (user_indices, product_indices)),
+                                    shape=(len(user_dict), len(product_dict)))
 
-# Initialize the BPR model for collaborative filtering
-bpr_model = BayesianPersonalizedRanking(factors=50, iterations=50)
-bpr_model.fit(interactions_matrix)
+    # Preprocessing: Create user preference vectors using TF-IDF for content-based filtering
+    vectorizer = TfidfVectorizer()
+    product_descriptions = product_df["description"].fillna("")
+    product_description_vectors = vectorizer.fit_transform(product_descriptions)
+    user_preferences_matrix = interactions_matrix.dot(product_description_vectors)
 
-# Streamlit UI
-st.title("Hybrid Product Recommendation System")
+    # Initialize the BPR model for collaborative filtering
+    bpr_model = BayesianPersonalizedRanking(factors=50, iterations=50)
+    bpr_model.fit(interactions_matrix)
 
-# Streamlit UI to take user input
-num_users = st.slider("Number of Users", min_value=10, max_value=100, value=50)
-num_products = st.slider("Number of Products", min_value=20, max_value=200, value=100)
-num_interactions = st.slider("Number of Interactions", min_value=100, max_value=1000, value=500)
+    # Streamlit UI
+    st.title("Hybrid Product Recommendation System")
 
-if st.button("Generate Recommendations"):
-    # User ID for which recommendations are needed
-    target_user_id = user_df.loc[5, 'user_id']
-    user_index = user_dict.get(target_user_id)
+    # Streamlit UI to take user input
+    num_users = st.slider("Number of Users", min_value=10, max_value=100, value=50)
+    num_products = st.slider("Number of Products", min_value=20, max_value=200, value=100)
+    num_interactions = st.slider("Number of Interactions", min_value=100, max_value=1000, value=500)
 
-    if user_index is None:
-        st.write("Target user not found in the interaction matrix.")
-    elif user_index >= len(bpr_model.user_factors):
-        st.write("User index is out of bounds for collaborative filtering model.")
-    else:
-        # Generate content-based recommendations
-        st.markdown(target_user_id)
-        user_preference_vector = user_preferences_matrix[user_index]
-        product_scores = product_description_vectors.dot(user_preference_vector.T)
-        recommended_product_indices_content = np.argsort(product_scores.A.flatten())[::-1][:10]
-        recommended_product_ids_content = [list(product_dict.keys())[list(product_dict.values()).index(product_index)] for product_index in recommended_product_indices_content]
-        
-        # Generate collaborative filtering recommendations
-        user_latent_factors = bpr_model.user_factors[user_index]
-        user_latent_factors_csr = csr_matrix(user_latent_factors.reshape(1, -1))
-        recommended_product_indices_collab, _ = bpr_model.recommend(user_index, user_latent_factors_csr, N=10)
-        recommended_product_ids_collab = [list(product_dict.keys())[list(product_dict.values()).index(product_index)] for product_index in recommended_product_indices_collab]
+    if st.button("Generate Recommendations"):
+        # User ID for which recommendations are needed
+        target_user_id = user_df.loc[5, 'user_id']
+        user_index = user_dict.get(target_user_id)
 
-        # Merge content-based and collaborative recommendations
-        recommended_product_ids = list(set(recommended_product_ids_content) | set(recommended_product_ids_collab))
-        recommended_products_df = product_df[product_df["product_id"].isin(recommended_product_ids)]
-        
-        st.subheader("Recommended Products for User")
-        st.dataframe(recommended_products_df)
+        if user_index is None:
+            st.write("Target user not found in the interaction matrix.")
+        elif user_index >= len(bpr_model.user_factors):
+            st.write("User index is out of bounds for collaborative filtering model.")
+        else:
+            # Generate content-based recommendations
+            st.markdown(target_user_id)
+            user_preference_vector = user_preferences_matrix[user_index]
+            product_scores = product_description_vectors.dot(user_preference_vector.T)
+            recommended_product_indices_content = np.argsort(product_scores.A.flatten())[::-1][:10]
+            recommended_product_ids_content = [list(product_dict.keys())[list(product_dict.values()).index(product_index)] for product_index in recommended_product_indices_content]
+            
+            # Generate collaborative filtering recommendations
+            user_latent_factors = bpr_model.user_factors[user_index]
+            user_latent_factors_csr = csr_matrix(user_latent_factors.reshape(1, -1))
+            recommended_product_indices_collab, _ = bpr_model.recommend(user_index, user_latent_factors_csr, N=10)
+            recommended_product_ids_collab = [list(product_dict.keys())[list(product_dict.values()).index(product_index)] for product_index in recommended_product_indices_collab]
+
+            # Merge content-based and collaborative recommendations
+            recommended_product_ids = list(set(recommended_product_ids_content) | set(recommended_product_ids_collab))
+            recommended_products_df = product_df[product_df["product_id"].isin(recommended_product_ids)]
+            
+            st.subheader("Recommended Products for User")
+            st.dataframe(recommended_products_df)

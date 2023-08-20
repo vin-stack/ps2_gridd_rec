@@ -49,7 +49,7 @@ if uploaded_user_file and uploaded_product_file and uploaded_interaction_file:
 
     if st.button("Generate Recommendations"):
         # User ID for which recommendations are needed
-        target_user_id = user_df.loc[5, 'user_id']
+        target_user_id = user_df.loc[0, 'user_id']
         user_index = user_dict.get(target_user_id)
 
         if user_index is None:
